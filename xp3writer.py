@@ -2,12 +2,24 @@ import zlib
 import struct
 import hashlib
 from io import BytesIO
-from structs import XP3FileIndex, XP3FileEncryption, XP3FileTime, XP3FileAdler, XP3FileSegments, XP3FileInfo, XP3File, \
-    XP3FileEntry, XP3Signature, encryption_parameters
+from structs import (
+    XP3FileIndex,
+    XP3FileEncryption,
+    XP3FileTime,
+    XP3FileAdler,
+    XP3FileSegments,
+    XP3FileInfo,
+    XP3File,
+    XP3FileEntry,
+    XP3Signature,
+    encryption_parameters,
+)
 
 
 class XP3Writer:
-    def __init__(self, buffer: BytesIO = None, silent: bool = False, use_numpy: bool = True):
+    def __init__(
+        self, buffer: BytesIO = None, silent: bool = False, use_numpy: bool = True
+    ):
         """
         :param buffer: Buffer object to write data to
         :param silent: Supress prints
@@ -21,7 +33,7 @@ class XP3Writer:
         self.use_numpy = use_numpy
         buffer.seek(0)
         buffer.write(XP3Signature)
-        buffer.write(struct.pack('<Q', 0))  # File index offset placeholder
+        buffer.write(struct.pack("<Q", 0))  # File index offset placeholder
         self.packed_up = False
         self._filenames = []
 
@@ -33,7 +45,13 @@ class XP3Writer:
             self.pack_up()
         self.buffer.close()
 
-    def add(self, internal_filepath: str, file: bytes, encryption_type: str = None, timestamp: int = 0):
+    def add(
+        self,
+        internal_filepath: str,
+        file: bytes,
+        encryption_type: str = None,
+        timestamp: int = 0,
+    ):
         """
         Add a file to the archive
         :param internal_filepath: Internal file path
@@ -42,7 +60,7 @@ class XP3Writer:
         :param timestamp: Timestamp (in milliseconds) to save
         """
         if self.packed_up:
-            raise Exception('Archive is already packed up')
+            raise Exception("Archive is already packed up")
         if internal_filepath in self._filenames:
             raise FileExistsError
 
@@ -52,12 +70,17 @@ class XP3Writer:
             uncompressed_data=file,
             offset=self.buffer.tell(),
             encryption_type=encryption_type,
-            timestamp=timestamp)
+            timestamp=timestamp,
+        )
         self.file_entries.append(file_entry)
         if not self.silent:
-            print('| Packing {} ({} -> {} bytes)'.format(internal_filepath,
-                                                         file_entry.segm.uncompressed_size,
-                                                         file_entry.segm.compressed_size))
+            print(
+                "| Packing {} ({} -> {} bytes)".format(
+                    internal_filepath,
+                    file_entry.segm.uncompressed_size,
+                    file_entry.segm.compressed_size,
+                )
+            )
         self.buffer.write(file)
 
     def pack_up(self) -> bytes:
@@ -66,7 +89,7 @@ class XP3Writer:
         (if already packed, just returns the archive)
         """
         if self.packed_up:
-            if hasattr(self.buffer, 'getvalue'):
+            if hasattr(self.buffer, "getvalue"):
                 return self.buffer.getvalue()
 
         # Write the file index
@@ -76,17 +99,23 @@ class XP3Writer:
 
         # Go back to the header and write the offset
         self.buffer.seek(len(XP3Signature))
-        self.buffer.write(struct.pack('<Q', file_index_offset))
+        self.buffer.write(struct.pack("<Q", file_index_offset))
 
         # Mark as packed up and return the resulting archive
         self.packed_up = True
         # Flush the buffer explicitly, had a test fail because index was missing
         self.buffer.flush()
-        if hasattr(self.buffer, 'getvalue'):
+        if hasattr(self.buffer, "getvalue"):
             return self.buffer.getvalue()
 
-    def _create_file_entry(self, internal_filepath, uncompressed_data, offset, encryption_type: str = None,
-                           timestamp: int = 0) -> (XP3FileEntry, bytes):
+    def _create_file_entry(
+        self,
+        internal_filepath,
+        uncompressed_data,
+        offset,
+        encryption_type: str = None,
+        timestamp: int = 0,
+    ) -> (XP3FileEntry, bytes):
         """
         Create a file entry for a file
         :param internal_filepath: Internal file path
@@ -99,12 +128,16 @@ class XP3Writer:
 
         adlr = XP3FileAdler.from_data(uncompressed_data)
 
-        is_encrypted = False if encryption_type in ('none', None) else True
+        is_encrypted = False if encryption_type in ("none", None) else True
         if is_encrypted:
-            uncompressed_data = self.xor(uncompressed_data, adlr.value, encryption_type, self.use_numpy)
+            uncompressed_data = self.xor(
+                uncompressed_data, adlr.value, encryption_type, self.use_numpy
+            )
             _, _, _, name = encryption_parameters[encryption_type]
             encryption = XP3FileEncryption(adlr.value, internal_filepath, name)
-            path_hash = hashlib.md5(internal_filepath.lower().encode('utf-16le')).hexdigest()
+            path_hash = hashlib.md5(
+                internal_filepath.lower().encode("utf-16le")
+            ).hexdigest()
         else:
             encryption = path_hash = None
 
@@ -121,21 +154,24 @@ class XP3Writer:
             is_compressed = True
 
         time = XP3FileTime(timestamp)
-        info = XP3FileInfo(is_encrypted=is_encrypted,
-                           uncompressed_size=uncompressed_size,
-                           compressed_size=compressed_size,
-                           file_path=internal_filepath if not is_encrypted else path_hash
-                           )
+        info = XP3FileInfo(
+            is_encrypted=is_encrypted,
+            uncompressed_size=uncompressed_size,
+            compressed_size=compressed_size,
+            file_path=internal_filepath if not is_encrypted else path_hash,
+        )
 
         segment = XP3FileSegments.segment(
             is_compressed=is_compressed,
             offset=offset,
             uncompressed_size=uncompressed_size,
-            compressed_size=compressed_size
+            compressed_size=compressed_size,
         )
         segm = XP3FileSegments([segment])
 
-        file_entry = XP3FileEntry(encryption=encryption, time=time, adlr=adlr, segm=segm, info=info)
+        file_entry = XP3FileEntry(
+            encryption=encryption, time=time, adlr=adlr, segm=segm, info=info
+        )
 
         return file_entry, data
 

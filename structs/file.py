@@ -4,8 +4,17 @@ from array import array
 import zlib
 from .encryption_parameters import encryption_parameters
 from .file_entry import XP3FileEntry
+
 try:
-    from numpy import frombuffer, uint8, bitwise_and, bitwise_xor, right_shift, concatenate
+    from numpy import (
+        frombuffer,
+        uint8,
+        bitwise_and,
+        bitwise_xor,
+        right_shift,
+        concatenate,
+    )
+
     numpy = True
 except ModuleNotFoundError:
     numpy = False
@@ -24,13 +33,13 @@ class XP3File(XP3FileEntry):
             time=index_entry.time,
             adlr=index_entry.adlr,
             segm=index_entry.segm,
-            info=index_entry.info
+            info=index_entry.info,
         )
         self.buffer = buffer
         self.silent = silent
         self.use_numpy = use_numpy
 
-    def read(self, encryption_type='none', raw=False):
+    def read(self, encryption_type="none", raw=False):
         """Reads the file from buffer and return it's data"""
         for segment in self.segm:
             self.buffer.seek(segment.offset)
@@ -43,21 +52,23 @@ class XP3File(XP3FileEntry):
 
             if self.is_encrypted:
                 file_buffer = BytesIO(data)
-                if encryption_type in ('none', None) and not raw:
-                    raise XP3DecryptionError('File is encrypted and no encryption type was specified')
+                if encryption_type in ("none", None) and not raw:
+                    raise XP3DecryptionError(
+                        "File is encrypted and no encryption type was specified"
+                    )
                 self.xor(file_buffer, self.adler32, encryption_type, self.use_numpy)
                 data = file_buffer.getvalue()
                 file_buffer.close()
         return data
 
-    def extract(self, to='', name=None, encryption_type='none', raw=False):
+    def extract(self, to="", name=None, encryption_type="none", raw=False):
         """
         Reads the data and saves the file to specified folder,
         if no location is specified, unpacks into folder with archive name (data.xp3, unpacks into data folder)
         """
         file = self.read(encryption_type=encryption_type, raw=raw)
         if zlib.adler32(file) != self.adler32 and not self.silent:
-            print('! Checksum error')
+            print("! Checksum error")
 
         if not to:
             # Use archive name as output folder if it's not explicitly specified
@@ -70,13 +81,15 @@ class XP3File(XP3FileEntry):
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
-        with open(to, 'wb') as output:
+        with open(to, "wb") as output:
             output.write(file)
 
     @staticmethod
     def xor(output_buffer, adler32: int, encryption_type: str, use_numpy: bool = True):
         """XOR the data, uses numpy if available"""
-        master_key, secondary_key, xor_the_first_byte, _ = encryption_parameters[encryption_type]
+        master_key, secondary_key, xor_the_first_byte, _ = encryption_parameters[
+            encryption_type
+        ]
         # Read the encrypted data from buffer
         output_buffer.seek(0)
         data = output_buffer.read()
@@ -85,7 +98,18 @@ class XP3File(XP3FileEntry):
         if numpy and use_numpy:
             # Calculate the XOR key
             adler_key = bitwise_xor(adler32, master_key)
-            xor_key = bitwise_and(bitwise_xor(bitwise_xor(bitwise_xor(right_shift(adler_key, 24), right_shift(adler_key, 16)), right_shift(adler_key, 8)), adler_key), 0xFF)
+            xor_key = bitwise_and(
+                bitwise_xor(
+                    bitwise_xor(
+                        bitwise_xor(
+                            right_shift(adler_key, 24), right_shift(adler_key, 16)
+                        ),
+                        right_shift(adler_key, 8),
+                    ),
+                    adler_key,
+                ),
+                0xFF,
+            )
             if not xor_key:
                 xor_key = secondary_key
 
@@ -106,11 +130,13 @@ class XP3File(XP3FileEntry):
             data = bitwise_xor(data, xor_key)
         else:
             adler_key = adler32 ^ master_key
-            xor_key = (adler_key >> 24 ^ adler_key >> 16 ^ adler_key >> 8 ^ adler_key) & 0xFF
+            xor_key = (
+                adler_key >> 24 ^ adler_key >> 16 ^ adler_key >> 8 ^ adler_key
+            ) & 0xFF
             if not xor_key:
                 xor_key = secondary_key
 
-            data = array('B', data)
+            data = array("B", data)
 
             if xor_the_first_byte:
                 first_byte_key = adler_key & 0xFF
