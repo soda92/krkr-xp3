@@ -23,9 +23,8 @@ class XP3FileEncryption:
     def read_from(cls, buffer: BufferedReader, name: bytes = b'eliF'):
         start = buffer.tell() + 8
         size, adler32, file_path_length = cls.encryption_chunk.unpack(buffer.read(14))
-        file_path, = struct.unpack('<' + (str(file_path_length * 2) + 's') + 'xx',
-                                   buffer.read(2 + file_path_length * 2))
-        file_path = file_path.decode('utf-16le')
+        path_data = buffer.read(size - 6)
+        file_path = path_data[:file_path_length * 2].decode('utf-16le')
 
         if buffer.tell() != start + size:  # chunk size doesn't include the size itself
             raise AssertionError('Buffer position {}, expected {}'.format(buffer.tell(),
@@ -118,10 +117,8 @@ class XP3FileInfo:
             = cls.info_chunk.unpack(buffer.read(30))
         encrypted = bool(flags & XP3FileIsEncrypted)
 
-        # 2 bytes per character and 2 bytes null-terminator
-        file_path, = struct.unpack('<' + (str(file_path_length * 2) + 's') + 'xx',
-                                   buffer.read(2 + file_path_length * 2))
-        file_path = file_path.decode('utf-16le')
+        path_data = buffer.read(size - 22)
+        file_path = path_data[:file_path_length * 2].decode('utf-16le')
 
         if buffer.tell() != start + size:
             raise AssertionError('Buffer position {}, expected {}'.format(buffer.tell(),
